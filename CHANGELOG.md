@@ -1,3 +1,16 @@
+# v0.0.2 (Fri Jul 25 2025)
+
+#### ⚠️ Pushed to `main`
+
+- Merge branch 'main' of github.com:mahmoudfa97/tcpserver ([@mahmoudfa97](https://github.com/mahmoudfa97))
+- aa ([@mahmoudfa97](https://github.com/mahmoudfa97))
+
+#### Authors: 1
+
+- Mahmoud Faour ([@mahmoudfa97](https://github.com/mahmoudfa97))
+
+---
+
 # v0.0.1 (Fri Jul 25 2025)
 
 :tada: This release contains work from a new contributor! :tada:
