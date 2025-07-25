@@ -55,6 +55,7 @@ server.on('connection', (socket) => {
 
 server.listen(PORT, () => {
   console.log(`🚀 TCP server for BioStar 2 running on port ${PORT}`);
+  console.log(`🚀 TCP server for BioStar 2 running on server ${server}`);
 });
 
 // --- Message Handling Logic ---
