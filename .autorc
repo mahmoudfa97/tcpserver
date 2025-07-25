@@ -1,0 +1,12 @@
+{
+  "plugins": [
+    "git-tag",
+    "all-contributors",
+    "first-time-contributor",
+    "released"
+  ],
+  "owner": "mahmoudfa97",
+  "repo": "tcpserver",
+  "name": "mahmoudfa97",
+  "email": "leedor97@gmail.com",
+}
