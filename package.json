@@ -1,0 +1,14 @@
+{
+  "name": "biostar-tcp-server",
+  "version": "1.0.0",
+  "description": "TCP server for receiving events from a BioStar 2 device.",
+  "main": "servers/biostar-tcp-server.mjs",
+  "type": "module",
+  "scripts": {
+    "start": "node biostar-tcp-server.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.7",
+    "dotenv": "^16.4.5"
+  }
+}
