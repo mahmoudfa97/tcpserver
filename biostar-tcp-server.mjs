@@ -26,6 +26,7 @@ const server = net.createServer();
 server.on('connection', (socket) => {
   const remoteAddress = `${socket.remoteAddress}:${socket.remotePort}`;
   console.log(`📡 New client connected: ${remoteAddress}`);
+  console.log(`📡 server: ${server}`);
 
   let buffer = '';
 
