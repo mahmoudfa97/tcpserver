@@ -1,9 +1,5 @@
 import net from 'net';
 import { createClient } from '@supabase/supabase-js';
-import dotenv from 'dotenv';
-
-// Load environment variables from .env file
-dotenv.config();
 
 // --- Configuration ---
 const PORT = 51212;
