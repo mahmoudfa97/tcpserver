@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // --- Configuration ---
-const PORT = 3000;
+const PORT = 51212;
 const SUPABASE_URL = "https://gylemjegmangxyqzxhas.supabase.co"
 
 const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd5bGVtamVnbWFuZ3h5cXp4aGFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ2MjM2NTUsImV4cCI6MjA2MDE5OTY1NX0.W5hv0fSJ6u4Q3RLoE5SF6H3MWmMsz7FUtknT3CYgJLI"
@@ -26,7 +26,6 @@ const server = net.createServer();
 server.on('connection', (socket) => {
   const remoteAddress = `${socket.remoteAddress}:${socket.remotePort}`;
   console.log(`📡 New client connected: ${remoteAddress}`);
-  console.log(`📡 server: ${server}`);
 
   let buffer = '';
 
@@ -55,7 +54,6 @@ server.on('connection', (socket) => {
 
 server.listen(PORT, () => {
   console.log(`🚀 TCP server for BioStar 2 running on port ${PORT}`);
-  console.log(`🚀 TCP server for BioStar 2 running on server ${server}`);
 });
 
 // --- Message Handling Logic ---
