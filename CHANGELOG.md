@@ -1,3 +1,15 @@
+# v0.0.8 (Sat Jul 26 2025)
+
+#### ⚠️ Pushed to `main`
+
+- last test ([@mahmoudfa97](https://github.com/mahmoudfa97))
+
+#### Authors: 1
+
+- Mahmoud Faour ([@mahmoudfa97](https://github.com/mahmoudfa97))
+
+---
+
 # v0.0.7 (Sat Jul 26 2025)
 
 #### ⚠️ Pushed to `main`
