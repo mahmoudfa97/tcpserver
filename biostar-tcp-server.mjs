@@ -31,6 +31,7 @@ server.on('connection', (socket) => {
 
   socket.on('data', (data) => {
     buffer += data.toString();
+    console.log(data.toString());
     // Process buffer line by line (assuming newline-delimited JSON)
     let boundary = buffer.indexOf('\n');
     while (boundary !== -1) {
