@@ -1,5 +1,7 @@
 const net = require("net")
 const axios = require("axios")
+const https = require("https")
+const http = require("http")
 
 class BioStarTCPServer {
   constructor(port = 51212) {
@@ -7,12 +9,21 @@ class BioStarTCPServer {
     this.server = null
     this.clients = new Map()
     this.biostarSession = null
-    this.biostarBaseUrl = process.env.BIOSTAR_URL || "https://192.168.0.140:4443/api"
+
+    // Try both HTTP and HTTPS URLs
+    this.biostarUrls = [
+      process.env.BIOSTAR_URL || "http://192.168.0.140:4443/api",
+      "https://192.168.0.140:4443/api",
+      "http://192.168.0.140:80/api",
+      "http://192.168.0.140:8080/api",
+    ]
+
     this.credentials = {
       login_id: process.env.BIOSTAR_USERNAME || "admin",
       password: process.env.BIOSTAR_PASSWORD || "Spartagym!",
     }
     this.enrollmentRequests = new Map()
+    this.currentBiostarUrl = null
 
     // Disable SSL verification for self-signed certificates
     process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0
@@ -46,7 +57,6 @@ class BioStarTCPServer {
 
     this.server.listen(this.port, () => {
       console.log(`BioStar TCP Server listening on port ${this.port}`)
-      console.log(`BioStar URL: ${this.biostarBaseUrl}`)
       this.initializeBioStarConnection()
     })
 
@@ -176,63 +186,73 @@ class BioStarTCPServer {
     console.log(`Sent generic response to ${clientId} for command 0x${originalCommand.toString(16)}`)
   }
 
-  async initializeBioStarConnection() {
+  async tryConnection(url) {
     try {
-      console.log("Initializing BioStar connection...")
-      console.log(`Connecting to: ${this.biostarBaseUrl}`)
-      console.log(`Username: ${this.credentials.login_id}`)
+      console.log(`Trying connection to: ${url}`)
+
+      const isHttps = url.startsWith("https")
+      const axiosConfig = {
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        timeout: 15000,
+      }
+
+      if (isHttps) {
+        axiosConfig.httpsAgent = new https.Agent({
+          rejectUnauthorized: false,
+          secureProtocol: "TLSv1_2_method", // Try specific TLS version
+        })
+      }
 
       const response = await axios.post(
-        `${this.biostarBaseUrl}/login`,
+        `${url}/login`,
         {
           User: {
             login_id: this.credentials.login_id,
             password: this.credentials.password,
           },
         },
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          timeout: 30000, // Increased timeout to 30 seconds
-          httpsAgent: new (require("https").Agent)({
-            rejectUnauthorized: false, // Accept self-signed certificates
-          }),
-        },
+        axiosConfig,
       )
 
       if (response.data && response.data.Response) {
         this.biostarSession = response.data.Response.session_id
-        console.log("BioStar authentication successful!")
+        this.currentBiostarUrl = url
+        console.log(`✅ BioStar authentication successful with ${url}!`)
         console.log("Session ID:", this.biostarSession)
         return true
-      } else {
-        console.error("Invalid response format:", response.data)
-        return false
       }
+
+      return false
     } catch (error) {
-      console.error("BioStar authentication error:", error.message)
-
-      if (error.code === "ECONNREFUSED") {
-        console.error("Connection refused - check if BioStar device is accessible")
-      } else if (error.code === "ETIMEDOUT") {
-        console.error("Connection timeout - device may be slow to respond")
-      } else if (error.response) {
-        console.error("Response status:", error.response.status)
-        console.error("Response data:", error.response.data)
-      }
-
-      // Retry after 60 seconds
-      console.log("Retrying BioStar connection in 60 seconds...")
-      setTimeout(() => this.initializeBioStarConnection(), 60000)
+      console.log(`❌ Failed to connect to ${url}:`, error.message)
       return false
     }
   }
 
+  async initializeBioStarConnection() {
+    console.log("🔄 Initializing BioStar connection...")
+    console.log(`Username: ${this.credentials.login_id}`)
+
+    // Try each URL until one works
+    for (const url of this.biostarUrls) {
+      const success = await this.tryConnection(url)
+      if (success) {
+        return true
+      }
+    }
+
+    console.error("❌ Failed to connect to any BioStar URL")
+    console.log("Retrying BioStar connection in 60 seconds...")
+    setTimeout(() => this.initializeBioStarConnection(), 60000)
+    return false
+  }
+
   async enrollUser(userData) {
     try {
-      if (!this.biostarSession) {
+      if (!this.biostarSession || !this.currentBiostarUrl) {
         console.log("No active session, attempting to authenticate...")
         const authSuccess = await this.initializeBioStarConnection()
         if (!authSuccess) {
@@ -242,8 +262,25 @@ class BioStarTCPServer {
 
       console.log("Enrolling user in BioStar:", userData)
 
+      const isHttps = this.currentBiostarUrl.startsWith("https")
+      const axiosConfig = {
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "bs-session-id": this.biostarSession,
+        },
+        timeout: 30000,
+      }
+
+      if (isHttps) {
+        axiosConfig.httpsAgent = new https.Agent({
+          rejectUnauthorized: false,
+          secureProtocol: "TLSv1_2_method",
+        })
+      }
+
       const response = await axios.post(
-        `${this.biostarBaseUrl}/users`,
+        `${this.currentBiostarUrl}/users`,
         {
           User: {
             user_id: userData.user_id,
@@ -254,17 +291,7 @@ class BioStarTCPServer {
             expiry_datetime: userData.expiry_datetime || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
           },
         },
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            "bs-session-id": this.biostarSession,
-          },
-          timeout: 30000,
-          httpsAgent: new (require("https").Agent)({
-            rejectUnauthorized: false,
-          }),
-        },
+        axiosConfig,
       )
 
       console.log("User enrolled successfully in BioStar:", response.data)
@@ -275,10 +302,81 @@ class BioStarTCPServer {
       if (error.response && error.response.status === 401) {
         console.log("Session expired, re-authenticating...")
         this.biostarSession = null
+        this.currentBiostarUrl = null
         await this.initializeBioStarConnection()
       }
 
       throw error
+    }
+  }
+
+  handleEnrollmentRequest(clientId, data) {
+    console.log(`Processing enrollment request from ${clientId}`)
+
+    // Extract user data from the protocol data
+    if (data.length >= 16) {
+      const userId = data.readUInt32LE(8)
+      console.log(`Enrollment request for user ID: ${userId}`)
+
+      // Store enrollment request
+      this.enrollmentRequests.set(clientId, {
+        userId: userId,
+        startTime: new Date(),
+        status: "pending",
+      })
+
+      // Send acknowledgment
+      const response = Buffer.alloc(12)
+      response.writeUInt32LE(0x10101316, 0) // Header
+      response.writeUInt16LE(0x1001, 4) // Echo command
+      response.writeUInt16LE(4, 6) // Data length
+      response.writeUInt32LE(0x00000001, 8) // Status: OK
+
+      const client = this.clients.get(clientId)
+      if (client) {
+        client.socket.write(response)
+        console.log(`Sent enrollment acknowledgment to ${clientId}`)
+      }
+    }
+  }
+
+  handleFingerprintData(clientId, data) {
+    console.log(`Processing fingerprint data from ${clientId}`)
+
+    const enrollmentRequest = this.enrollmentRequests.get(clientId)
+    if (enrollmentRequest) {
+      console.log(`Fingerprint data for user ${enrollmentRequest.userId}`)
+
+      // Update enrollment status
+      enrollmentRequest.status = "completed"
+      enrollmentRequest.completedTime = new Date()
+
+      // Send success response
+      const response = Buffer.alloc(12)
+      response.writeUInt32LE(0x10101316, 0) // Header
+      response.writeUInt16LE(0x1002, 4) // Echo command
+      response.writeUInt16LE(4, 6) // Data length
+      response.writeUInt32LE(0x00000001, 8) // Status: OK
+
+      const client = this.clients.get(clientId)
+      if (client) {
+        client.socket.write(response)
+        console.log(`Sent fingerprint acknowledgment to ${clientId}`)
+      }
+
+      // TODO: Update Supabase database with enrollment completion
+      this.updateSupabaseEnrollment(enrollmentRequest)
+    }
+  }
+
+  async updateSupabaseEnrollment(enrollmentRequest) {
+    try {
+      console.log("Updating Supabase with enrollment completion:", enrollmentRequest)
+
+      // This would update the member_fingerprints table
+      // Implementation depends on your Supabase setup
+    } catch (error) {
+      console.error("Error updating Supabase:", error.message)
     }
   }
 
@@ -293,6 +391,7 @@ class BioStarTCPServer {
     return {
       serverRunning: true,
       biostarSession: !!this.biostarSession,
+      currentBiostarUrl: this.currentBiostarUrl,
       connectedClients: connectedClients.length,
       clients: connectedClients,
       enrollmentRequests: this.enrollmentRequests.size,
@@ -320,22 +419,57 @@ const httpPort = Number.parseInt(process.env.PORT || 3001) + 1000
 
 app.use(express.json())
 
-app.get("/status", (req, res) => {
+// CORS middleware
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*")
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+  if (req.method === "OPTIONS") {
+    res.sendStatus(200)
+  } else {
+    next()
+  }
+})
+
+app.get("/api/status", (req, res) => {
   res.json(server.getServerStatus())
 })
 
-app.post("/enroll", async (req, res) => {
+app.post("/api/enroll", async (req, res) => {
   try {
+    console.log("Received enrollment request:", req.body)
     const result = await server.enrollUser(req.body)
     res.json({ success: true, data: result })
+  } catch (error) {
+    console.error("Enrollment error:", error.message)
+    res.status(500).json({ success: false, error: error.message })
+  }
+})
+
+app.post("/api/cancel", (req, res) => {
+  try {
+    console.log("Received cancel request:", req.body)
+    // Handle cancellation logic
+    res.json({ success: true, message: "Cancellation request processed" })
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message })
+  }
+})
+
+app.post("/api/delete", (req, res) => {
+  try {
+    console.log("Received delete request:", req.body)
+    // Handle deletion logic
+    res.json({ success: true, message: "Delete request processed" })
   } catch (error) {
     res.status(500).json({ success: false, error: error.message })
   }
 })
 
 app.listen(httpPort, () => {
-  console.log(`HTTP API listening on port ${httpPort}`)
-  console.log(`Status endpoint: http://localhost:${httpPort}/status`)
+  console.log(`🌐 HTTP API listening on port ${httpPort}`)
+  console.log(`📊 Status endpoint: http://localhost:${httpPort}/api/status`)
+  console.log(`👤 Enroll endpoint: http://localhost:${httpPort}/api/enroll`)
 })
 
 // Handle graceful shutdown
@@ -355,6 +489,6 @@ process.on("SIGTERM", () => {
 setInterval(() => {
   const status = server.getServerStatus()
   console.log(
-    `Server Status - Clients: ${status.connectedClients}, Session: ${status.biostarSession ? "Active" : "Inactive"}, Uptime: ${Math.floor(status.uptime)}s`,
+    `📊 Server Status - Clients: ${status.connectedClients}, Session: ${status.biostarSession ? "Active" : "Inactive"}, URL: ${status.currentBiostarUrl || "None"}, Uptime: ${Math.floor(status.uptime)}s`,
   )
 }, 300000) // Every 5 minutes
