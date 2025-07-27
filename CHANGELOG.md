@@ -1,3 +1,15 @@
+# v0.0.11 (Sun Jul 27 2025)
+
+#### ⚠️ Pushed to `main`
+
+- Rename biostar-tcp-server.mjs to biostar-tcp-server.js ([@mahmoudfa97](https://github.com/mahmoudfa97))
+
+#### Authors: 1
+
+- Mahmoud Faour ([@mahmoudfa97](https://github.com/mahmoudfa97))
+
+---
+
 # v0.0.10 (Sun Jul 27 2025)
 
 #### ⚠️ Pushed to `main`
