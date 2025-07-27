@@ -1,3 +1,15 @@
+# v0.0.12 (Sun Jul 27 2025)
+
+#### ⚠️ Pushed to `main`
+
+- Update package.json ([@mahmoudfa97](https://github.com/mahmoudfa97))
+
+#### Authors: 1
+
+- Mahmoud Faour ([@mahmoudfa97](https://github.com/mahmoudfa97))
+
+---
+
 # v0.0.11 (Sun Jul 27 2025)
 
 #### ⚠️ Pushed to `main`
