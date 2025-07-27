@@ -343,7 +343,7 @@ class BioStarTCPServer {
 }
 
 // Start the server
-const server = new BioStarTCPServer(process.env.PORT || 3001)
+const server = new BioStarTCPServer(51212)
 server.start()
 
 // Handle graceful shutdown
