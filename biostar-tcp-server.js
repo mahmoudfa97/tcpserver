@@ -236,8 +236,8 @@ class BioStarTCPServer {
 
       const https = require("https")
       const httpsAgent = new https.Agent({
-        rejectUnauthorized: false, // Accept self-signed certificates
-        secureProtocol: "TLSv1_2_method",
+        rejectUnauthorized: true, // Accept self-signed certificates
+        keepAlive: true,
       })
 
       const response = await axios.post(
