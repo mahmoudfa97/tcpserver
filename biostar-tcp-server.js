@@ -291,10 +291,10 @@ class BioStarTCPServer {
     for (const url of this.biostarUrls) {
       let success = false;
 
-      if (url.startsWith("http://")) {
-        success = await this.tryHttpConnection(url);
-      } else if (url.startsWith("https://")) {
+      if (url.startsWith("https://")) {
         success = await this.tryHttpsConnection(url);
+      }else{
+        success = await this.tryHttpConnection(url);
       }
 
       if (success) {
