@@ -1,3 +1,15 @@
+# v0.0.15 (Sun Jul 27 2025)
+
+#### ⚠️ Pushed to `main`
+
+- Update biostar-tcp-server.js ([@mahmoudfa97](https://github.com/mahmoudfa97))
+
+#### Authors: 1
+
+- Mahmoud Faour ([@mahmoudfa97](https://github.com/mahmoudfa97))
+
+---
+
 # v0.0.14 (Sun Jul 27 2025)
 
 #### ⚠️ Pushed to `main`
