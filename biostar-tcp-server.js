@@ -476,7 +476,7 @@ server.start();
 
 // HTTP API endpoints
 const app = express();
-const httpPort = Number.parseInt(51212);
+const httpPort = Number.parseInt(3301);
 
 app.use(express.json());
 
