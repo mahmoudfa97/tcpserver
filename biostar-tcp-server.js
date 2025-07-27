@@ -17,12 +17,7 @@ class BioStarTCPServer {
 
     // Try HTTP first - most BioStar devices use plain HTTP
     this.biostarUrls = [
-      "http://192.168.0.140:4443/api", // HTTP first!
-      "http://192.168.0.140:80/api",
-      "http://192.168.0.140:8080/api",
-      "cgk1.clusters.zeabur.com:30112/api",
-      "http://192.168.0.140:443/api",
-      "https://192.168.0.140:4443/api", // HTTPS last resort
+      "https://cgk1.clusters.zeabur.com:30112/api",
     ];
 
     console.log("🚀 BioStar TCP Server initializing...");
@@ -190,11 +185,7 @@ class BioStarTCPServer {
           },
         },
         {
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            "User-Agent": "BioStar-TCP-Server/1.0",
-          },
+          headers: {},
           timeout: 10000,
           // Explicitly disable any SSL/HTTPS handling
           maxRedirects: 0,
@@ -303,9 +294,6 @@ class BioStarTCPServer {
       }
     }
 
-    console.error("❌ Failed to connect to any BioStar URL");
-    console.log("🔄 Retrying BioStar connection in 60 seconds...");
-    setTimeout(() => this.initializeBioStarConnection(), 60000);
     return false;
   }
 
@@ -488,7 +476,7 @@ server.start();
 
 // HTTP API endpoints
 const app = express();
-const httpPort = Number.parseInt(process.env.PORT || 3001) + 1000;
+const httpPort = Number.parseInt(51212);
 
 app.use(express.json());
 
