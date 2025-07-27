@@ -4,8 +4,8 @@
   "description": "Node.js server for BioStar fingerprint device communication",
   "main": "biostar-tcp-server.js",
   "scripts": {
-    "start": "node biostar-tcp-server.mjs",
-    "dev": "nodemon biostar-tcp-server.mjs"
+    "start": "node biostar-tcp-server.js",
+    "dev": "nodemon biostar-tcp-server.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.7",
