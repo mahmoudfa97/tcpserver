@@ -1,7 +1,5 @@
 const net = require("net")
 const axios = require("axios")
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd5bGVtamVnbWFuZ3h5cXp4aGFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ2MjM2NTUsImV4cCI6MjA2MDE5OTY1NX0.W5hv0fSJ6u4Q3RLoE5SF6H3MWmMsz7FUtknT3CYgJLI"
-const SUPABASE_URL = "https://gylemjegmangxyqzxhas.supabase.co"
 
 class BioStarTCPServer {
   constructor(port = 51212) {
@@ -9,11 +7,15 @@ class BioStarTCPServer {
     this.server = null
     this.clients = new Map()
     this.biostarSession = null
-    this.biostarBaseUrl = "https://cgk1.clusters.zeabur.com:30112/api"
+    this.biostarBaseUrl = process.env.BIOSTAR_URL || "https://192.168.0.140:4443/api"
     this.credentials = {
-      login_id: "admin",
-      password: "Spartagym!",
+      login_id: process.env.BIOSTAR_USERNAME || "admin",
+      password: process.env.BIOSTAR_PASSWORD || "Spartagym!",
     }
+    this.enrollmentRequests = new Map()
+
+    // Disable SSL verification for self-signed certificates
+    process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0
   }
 
   start() {
@@ -21,7 +23,11 @@ class BioStarTCPServer {
       const clientId = `${socket.remoteAddress}:${socket.remotePort}`
       console.log(`New client connected: ${clientId}`)
 
-      this.clients.set(clientId, socket)
+      this.clients.set(clientId, {
+        socket: socket,
+        connectedAt: new Date(),
+        lastActivity: new Date(),
+      })
 
       socket.on("data", (data) => {
         this.handleClientData(clientId, data)
@@ -40,6 +46,7 @@ class BioStarTCPServer {
 
     this.server.listen(this.port, () => {
       console.log(`BioStar TCP Server listening on port ${this.port}`)
+      console.log(`BioStar URL: ${this.biostarBaseUrl}`)
       this.initializeBioStarConnection()
     })
 
@@ -50,127 +57,137 @@ class BioStarTCPServer {
 
   handleClientData(clientId, data) {
     try {
-      console.log(`Received data from ${clientId}:`, data.toString("hex"))
-
-      // Check if this is HTTP data (starts with HTTP method)
-      const dataStr = data.toString()
-      if (dataStr.startsWith("POST") || dataStr.startsWith("GET") || dataStr.startsWith("PUT")) {
-        this.handleHttpRequest(clientId, dataStr)
-        return
+      const client = this.clients.get(clientId)
+      if (client) {
+        client.lastActivity = new Date()
       }
 
-      // Handle raw TCP data
-      this.handleRawTcpData(clientId, data)
+      console.log(`Received data from ${clientId}:`, data.toString("hex"))
+
+      // Parse BioStar protocol
+      this.parseBioStarProtocol(clientId, data)
     } catch (error) {
       console.error(`Error processing data from ${clientId}:`, error.message)
     }
   }
 
-  handleHttpRequest(clientId, httpData) {
-    try {
-      console.log(`Processing HTTP request from ${clientId}`)
+  parseBioStarProtocol(clientId, data) {
+    if (data.length < 8) {
+      console.log(`Data too short from ${clientId}:`, data.toString("hex"))
+      return
+    }
 
-      // Split headers and body
-      const parts = httpData.split("\r\n\r\n")
-      if (parts.length < 2) {
-        console.error("Invalid HTTP request format")
-        return
-      }
+    // Parse BioStar protocol based on your logs
+    const header = data.readUInt32LE(0)
+    const command = data.readUInt16LE(4)
+    const length = data.readUInt16LE(6)
 
-      const headers = parts[0]
-      const body = parts[1]
+    console.log(
+      `BioStar Protocol - Header: 0x${header.toString(16)}, Command: 0x${command.toString(16)}, Length: ${length}`,
+    )
 
-      console.log("HTTP Headers:", headers)
-      console.log("HTTP Body:", body)
+    // Handle different commands based on your device logs
+    switch (command) {
+      case 0x179: // Unknown command from logs
+        console.log("Handling command 0x179 - Device status request")
+        this.sendDeviceStatusResponse(clientId)
+        break
 
-      // Try to parse JSON body
-      if (body.trim()) {
-        try {
-          const jsonData = JSON.parse(body)
-          console.log("Parsed JSON:", jsonData)
+      case 0x108: // Unknown command from logs
+        console.log("Handling command 0x108 - Device info request")
+        this.sendDeviceInfoResponse(clientId)
+        break
 
-          // Handle different API endpoints
-          if (headers.includes("POST") && headers.includes("/login")) {
-            this.handleLoginRequest(clientId, jsonData)
-          } else if (headers.includes("POST") && headers.includes("/users")) {
-            this.handleUserEnrollment(clientId, jsonData)
-          }
-        } catch (jsonError) {
-          console.error("JSON parsing error:", jsonError.message)
-          console.log("Raw body:", body)
-        }
-      }
-    } catch (error) {
-      console.error("Error handling HTTP request:", error.message)
+      case 0x0: // Empty command
+        console.log("Handling command 0x0 - Keep alive")
+        this.sendKeepAliveResponse(clientId)
+        break
+
+      case 0x1001: // User enrollment request
+        console.log("Handling user enrollment request")
+        this.handleEnrollmentRequest(clientId, data)
+        break
+
+      case 0x1002: // Fingerprint data
+        console.log("Handling fingerprint data")
+        this.handleFingerprintData(clientId, data)
+        break
+
+      default:
+        console.log(`Unknown command: 0x${command.toString(16)}`)
+        this.sendGenericResponse(clientId, command)
     }
   }
 
-  handleRawTcpData(clientId, data) {
-    // Handle BioStar device protocol data
-    console.log(`Processing raw TCP data from ${clientId}`)
+  sendDeviceStatusResponse(clientId) {
+    const client = this.clients.get(clientId)
+    if (!client) return
 
-    // Parse BioStar protocol
-    if (data.length >= 8) {
-      const header = data.readUInt32LE(0)
-      const command = data.readUInt16LE(4)
-      const length = data.readUInt16LE(6)
+    // Create response based on BioStar protocol
+    const response = Buffer.alloc(16)
+    response.writeUInt32LE(0x10101316, 0) // Header from logs
+    response.writeUInt16LE(0x179, 4) // Echo command
+    response.writeUInt16LE(8, 6) // Data length
+    response.writeUInt32LE(0x00000001, 8) // Status: OK
+    response.writeUInt32LE(Date.now() & 0xffffffff, 12) // Timestamp
 
-      console.log(
-        `BioStar Protocol - Header: 0x${header.toString(16)}, Command: 0x${command.toString(16)}, Length: ${length}`,
-      )
-
-      // Handle different commands
-      switch (command) {
-        case 0x1001: // Device info request
-          this.sendDeviceInfo(clientId)
-          break
-        case 0x1002: // User enrollment
-          this.handleUserEnrollmentCommand(clientId, data)
-          break
-        case 0x1003: // User deletion
-          this.handleUserDeletionCommand(clientId, data)
-          break
-        default:
-          console.log(`Unknown command: 0x${command.toString(16)}`)
-      }
-    }
+    client.socket.write(response)
+    console.log(`Sent device status response to ${clientId}`)
   }
 
-  async handleLoginRequest(clientId, loginData) {
-    try {
-      console.log("Processing login request:", loginData)
+  sendDeviceInfoResponse(clientId) {
+    const client = this.clients.get(clientId)
+    if (!client) return
 
-      // Authenticate with BioStar device
-      const response = await this.authenticateBioStar(loginData)
+    const response = Buffer.alloc(32)
+    response.writeUInt32LE(0x10101316, 0) // Header
+    response.writeUInt16LE(0x108, 4) // Echo command
+    response.writeUInt16LE(24, 6) // Data length
+    response.write("BioStar2 Device v2.8.3", 8) // Device info
 
-      // Send response back to client
-      const socket = this.clients.get(clientId)
-      if (socket) {
-        const httpResponse = this.createHttpResponse(200, response)
-        socket.write(httpResponse)
-      }
-    } catch (error) {
-      console.error("Login request error:", error.message)
-
-      const socket = this.clients.get(clientId)
-      if (socket) {
-        const errorResponse = this.createHttpResponse(401, { error: "Authentication failed" })
-        socket.write(errorResponse)
-      }
-    }
+    client.socket.write(response)
+    console.log(`Sent device info response to ${clientId}`)
   }
 
-  async authenticateBioStar(credentials) {
+  sendKeepAliveResponse(clientId) {
+    const client = this.clients.get(clientId)
+    if (!client) return
+
+    const response = Buffer.alloc(8)
+    response.writeUInt32LE(0x3c3c7b7b, 0) // Header from logs
+    response.writeUInt16LE(0x0, 4) // Echo command
+    response.writeUInt16LE(0, 6) // No data
+
+    client.socket.write(response)
+    console.log(`Sent keep alive response to ${clientId}`)
+  }
+
+  sendGenericResponse(clientId, originalCommand) {
+    const client = this.clients.get(clientId)
+    if (!client) return
+
+    const response = Buffer.alloc(12)
+    response.writeUInt32LE(0x10101316, 0) // Header
+    response.writeUInt16LE(originalCommand, 4) // Echo command
+    response.writeUInt16LE(4, 6) // Data length
+    response.writeUInt32LE(0x00000001, 8) // Status: OK
+
+    client.socket.write(response)
+    console.log(`Sent generic response to ${clientId} for command 0x${originalCommand.toString(16)}`)
+  }
+
+  async initializeBioStarConnection() {
     try {
-      // Disable SSL verification for self-signed certificates
-      process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0
+      console.log("Initializing BioStar connection...")
+      console.log(`Connecting to: ${this.biostarBaseUrl}`)
+      console.log(`Username: ${this.credentials.login_id}`)
 
       const response = await axios.post(
         `${this.biostarBaseUrl}/login`,
         {
           User: {
-            login_id: credentials.login_id || this.credentials.login_id,
-            password: credentials.password || this.credentials.password,
+            login_id: this.credentials.login_id,
+            password: this.credentials.password,
           },
         },
         {
@@ -178,92 +195,53 @@ class BioStarTCPServer {
             "Content-Type": "application/json",
             Accept: "application/json",
           },
-          timeout: 10000,
+          timeout: 30000, // Increased timeout to 30 seconds
+          httpsAgent: new (require("https").Agent)({
+            rejectUnauthorized: false, // Accept self-signed certificates
+          }),
         },
       )
 
       if (response.data && response.data.Response) {
         this.biostarSession = response.data.Response.session_id
-        console.log("BioStar authentication successful, session:", this.biostarSession)
-        return response.data
+        console.log("BioStar authentication successful!")
+        console.log("Session ID:", this.biostarSession)
+        return true
+      } else {
+        console.error("Invalid response format:", response.data)
+        return false
       }
-
-      throw new Error("Invalid response format")
     } catch (error) {
       console.error("BioStar authentication error:", error.message)
-      if (error.response) {
+
+      if (error.code === "ECONNREFUSED") {
+        console.error("Connection refused - check if BioStar device is accessible")
+      } else if (error.code === "ETIMEDOUT") {
+        console.error("Connection timeout - device may be slow to respond")
+      } else if (error.response) {
         console.error("Response status:", error.response.status)
         console.error("Response data:", error.response.data)
       }
-      throw error
+
+      // Retry after 60 seconds
+      console.log("Retrying BioStar connection in 60 seconds...")
+      setTimeout(() => this.initializeBioStarConnection(), 60000)
+      return false
     }
   }
 
-  createHttpResponse(statusCode, data) {
-    const jsonData = JSON.stringify(data)
-    const response = [
-      `HTTP/1.1 ${statusCode} ${statusCode === 200 ? "OK" : "Error"}`,
-      "Content-Type: application/json",
-      "Access-Control-Allow-Origin: *",
-      "Access-Control-Allow-Methods: GET, POST, PUT, DELETE",
-      "Access-Control-Allow-Headers: Content-Type, Authorization",
-      `Content-Length: ${Buffer.byteLength(jsonData)}`,
-      "Connection: close",
-      "",
-      jsonData,
-    ].join("\r\n")
-
-    return response
-  }
-
-  sendDeviceInfo(clientId) {
-    const socket = this.clients.get(clientId)
-    if (socket) {
-      // Create device info response
-      const deviceInfo = Buffer.alloc(32)
-      deviceInfo.writeUInt32LE(0x12345678, 0) // Header
-      deviceInfo.writeUInt16LE(0x1001, 4) // Command response
-      deviceInfo.writeUInt16LE(24, 6) // Data length
-      deviceInfo.write("BioStar Device v2.0", 8)
-
-      socket.write(deviceInfo)
-      console.log(`Sent device info to ${clientId}`)
-    }
-  }
-
-  async handleUserEnrollment(clientId, userData) {
+  async enrollUser(userData) {
     try {
-      console.log("Processing user enrollment:", userData)
-
       if (!this.biostarSession) {
-        await this.authenticateBioStar(this.credentials)
+        console.log("No active session, attempting to authenticate...")
+        const authSuccess = await this.initializeBioStarConnection()
+        if (!authSuccess) {
+          throw new Error("Failed to authenticate with BioStar")
+        }
       }
 
-      // Enroll user in BioStar
-      const enrollmentResponse = await this.enrollUserInBioStar(userData)
+      console.log("Enrolling user in BioStar:", userData)
 
-      // Send response back to client
-      const socket = this.clients.get(clientId)
-      if (socket) {
-        const httpResponse = this.createHttpResponse(200, enrollmentResponse)
-        socket.write(httpResponse)
-      }
-
-      // Update Supabase
-      await this.updateSupabaseEnrollment(userData, enrollmentResponse)
-    } catch (error) {
-      console.error("User enrollment error:", error.message)
-
-      const socket = this.clients.get(clientId)
-      if (socket) {
-        const errorResponse = this.createHttpResponse(500, { error: "Enrollment failed" })
-        socket.write(errorResponse)
-      }
-    }
-  }
-
-  async enrollUserInBioStar(userData) {
-    try {
       const response = await axios.post(
         `${this.biostarBaseUrl}/users`,
         {
@@ -282,7 +260,10 @@ class BioStarTCPServer {
             Accept: "application/json",
             "bs-session-id": this.biostarSession,
           },
-          timeout: 10000,
+          timeout: 30000,
+          httpsAgent: new (require("https").Agent)({
+            rejectUnauthorized: false,
+          }),
         },
       )
 
@@ -290,46 +271,32 @@ class BioStarTCPServer {
       return response.data
     } catch (error) {
       console.error("BioStar enrollment error:", error.message)
+
+      if (error.response && error.response.status === 401) {
+        console.log("Session expired, re-authenticating...")
+        this.biostarSession = null
+        await this.initializeBioStarConnection()
+      }
+
       throw error
     }
   }
 
-  async updateSupabaseEnrollment(userData, biostarResponse) {
-    try {
-      // Update member fingerprints table in Supabase
-      const supabaseResponse = await axios.post(
-        `${SUPABASE_URL}/rest/v1/member_fingerprints`,
-        {
-          member_id: userData.member_id,
-          biostar_user_id: userData.user_id,
-          enrollment_status: "enrolled",
-          enrolled_at: new Date().toISOString(),
-          biostar_response: biostarResponse,
-        },
-        {
-          headers: {
-            apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-            "Content-Type": "application/json",
-          },
-        },
-      )
+  getServerStatus() {
+    const connectedClients = Array.from(this.clients.entries()).map(([id, client]) => ({
+      id,
+      connectedAt: client.connectedAt,
+      lastActivity: client.lastActivity,
+      address: id.split(":")[0],
+    }))
 
-      console.log("Supabase updated successfully")
-    } catch (error) {
-      console.error("Supabase update error:", error.message)
-    }
-  }
-
-  async initializeBioStarConnection() {
-    try {
-      console.log("Initializing BioStar connection...")
-      await this.authenticateBioStar(this.credentials)
-      console.log("BioStar connection initialized successfully")
-    } catch (error) {
-      console.error("Failed to initialize BioStar connection:", error.message)
-      // Retry after 30 seconds
-      setTimeout(() => this.initializeBioStarConnection(), 30000)
+    return {
+      serverRunning: true,
+      biostarSession: !!this.biostarSession,
+      connectedClients: connectedClients.length,
+      clients: connectedClients,
+      enrollmentRequests: this.enrollmentRequests.size,
+      uptime: process.uptime(),
     }
   }
 
@@ -342,9 +309,34 @@ class BioStarTCPServer {
   }
 }
 
-// Start the server
+// Create and start server
 const server = new BioStarTCPServer(51212)
 server.start()
+
+// HTTP endpoints for status and control
+const express = require("express")
+const app = express()
+const httpPort = Number.parseInt(process.env.PORT || 3001) + 1000
+
+app.use(express.json())
+
+app.get("/status", (req, res) => {
+  res.json(server.getServerStatus())
+})
+
+app.post("/enroll", async (req, res) => {
+  try {
+    const result = await server.enrollUser(req.body)
+    res.json({ success: true, data: result })
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message })
+  }
+})
+
+app.listen(httpPort, () => {
+  console.log(`HTTP API listening on port ${httpPort}`)
+  console.log(`Status endpoint: http://localhost:${httpPort}/status`)
+})
 
 // Handle graceful shutdown
 process.on("SIGINT", () => {
@@ -358,3 +350,11 @@ process.on("SIGTERM", () => {
   server.stop()
   process.exit(0)
 })
+
+// Periodic cleanup and status logging
+setInterval(() => {
+  const status = server.getServerStatus()
+  console.log(
+    `Server Status - Clients: ${status.connectedClients}, Session: ${status.biostarSession ? "Active" : "Inactive"}, Uptime: ${Math.floor(status.uptime)}s`,
+  )
+}, 300000) // Every 5 minutes
